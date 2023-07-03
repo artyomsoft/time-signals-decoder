@@ -147,14 +147,14 @@ class SignalProcessor:
             envelope_signal = envelope_detector.get_envelope(data)
             pwm_signal = threshold(envelope_signal, threshold_value)
             symbols = data_detector.process(pwm_signal)
-            print(symbols, end="")
+            print(symbols, end="", flush=True)
             for i in range(len(symbols)):
                 if symbols[i] == 'M':
                     try:
                         date = dcf_77_decode(dcf_77_message)
                         print_date(date, print_diff=print_diff)
                     except Exception as e:
-                        print('\nError parsing DCF77 message:' + str(e))
+                        print('\nError parsing DCF77 message:' + str(e), flush=True)
                     dcf_77_message = ''
                 else:
                     dcf_77_message += symbols[i]
