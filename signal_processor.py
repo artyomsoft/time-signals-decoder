@@ -27,8 +27,9 @@ class SignalSource(ABC):
 
 class WavFile(SignalSource):
     def __init__(self, file_name, sample_count=None):
-        self.sample_rate, self.file_data = wavfile.read(file_name, mmap=True)
-        self.stream = self.wav_file_stream(sample_count)
+        sample_rate, self.file_data = wavfile.read(file_name, mmap=True)
+        stream = self.wav_file_stream(sample_count)
+        super().__init__(stream, sample_rate)
 
     def wav_file_stream(self, sample_count, block_size=1000):
 
@@ -48,26 +49,26 @@ class WavFile(SignalSource):
 class AudioDevice(SignalSource):
 
     def __init__(self, sample_count=None):
-        self.cnt = 0
-        a = sd.query_devices(kind="input")
-        print(a)
-        self.sample_rate = a['default_samplerate']
-        self.sample_cnt = sample_count
-        self.stream = self.audio_device_stream(sample_count)
+        self.processed_count = 0
+        device_info = sd.query_devices(kind="input")
+        print(device_info)
+        sample_rate = device_info['default_samplerate']
+        stream = self.audio_device_stream(sample_count)
+        super().__init__(stream, sample_rate)
 
-    def audio_device_stream(self, sample_cnt):
+    def audio_device_stream(self, sample_count):
         event = threading.Event()
         queue = Queue()
-        self.cnt = 0
+        self.processed_count = 0
 
         def audio_callback(indata, samples, time, status):
             if status:
                 print(status)
                 return
             data = indata[:, 0]
-            self.cnt += samples
+            self.processed_count += samples
             queue.put(data)
-            if not (self.sample_cnt is None) and self.cnt > sample_cnt:
+            if not (sample_count is None) and self.processed_count > sample_count:
                 event.set()
 
         input_stream = sd.InputStream(callback=audio_callback)
@@ -111,7 +112,7 @@ class LowPassFilter:
 
 
 class SignalProcessor:
-
+    @staticmethod
     def draw_plots(signal_source, threshold_value):
         source = np.array([])
         envelope = np.array([])
@@ -134,6 +135,7 @@ class SignalProcessor:
         ax2.plot(pwm)
         plt.show()
 
+    @staticmethod
     def process_date_time(signal_source, threshold_value):
         print_diff = isinstance(signal_source, AudioDevice)
         dcf_77_message = ''
@@ -158,6 +160,7 @@ class SignalProcessor:
                     dcf_77_message = ''
                 else:
                     dcf_77_message += symbols[i]
+
 
 def validate_file(arg):
     if (file := Path(arg)).is_file():

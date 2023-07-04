@@ -28,9 +28,9 @@ def print_date(date, print_diff=False):
         time_diff = system_time-date
     if date is None:
         return
-    print(f'\nUTC Time: {date.astimezone(pytz.utc)}')
-    print(f'Encoded Time: {date}')
-    print(f'Time in your timezone: {date.astimezone(tzlocal())}')
-    print(f'System time: {system_time}')
+    print(f'\nUTC Time: {date.astimezone(pytz.utc)}', flush=True)
+    print(f'Encoded Time: {date}', flush=True)
+    print(f'Time in your timezone: {date.astimezone(tzlocal())}', flush=True)
+    print(f'System time: {system_time}', flush=True)
     if print_diff:
-        print(f'Time difference: {time_diff}')
+        print(f'Time difference: {time_diff}', flush=True)
