@@ -22,15 +22,13 @@ def from_bcd(bits):
     return result
 
 
-def print_date(date, print_diff=False):
+def print_datetime(datetime_with_tz, print_diff=False):
     system_time = datetime.now().astimezone()
     if print_diff:
-        time_diff = system_time-date
-    if date is None:
-        return
-    print(f'\nUTC Time: {date.astimezone(pytz.utc)}', flush=True)
-    print(f'Encoded Time: {date}', flush=True)
-    print(f'Time in your timezone: {date.astimezone(tzlocal())}', flush=True)
+        time_diff = system_time - datetime_with_tz
+    print(f'\nUTC Time: {datetime_with_tz.astimezone(pytz.utc)}', flush=True)
+    print(f'Encoded Time: {datetime_with_tz}', flush=True)
+    print(f'Time in your timezone: {datetime_with_tz.astimezone(tzlocal())}', flush=True)
     print(f'System time: {system_time}', flush=True)
     if print_diff:
         print(f'Time difference: {time_diff}', flush=True)

@@ -22,7 +22,7 @@ def dcf_77_decode(bits):
         'month': from_bcd((bits[45:50])),
         'year': from_bcd((bits[50:58])),
     }
-    offset = 2 if dcf_date_time['cest'] else 3
+    offset = 2 if dcf_date_time['cest'] else 1
 
     date = datetime(year=dcf_date_time['year']+2000,
                     month=dcf_date_time['month'],
@@ -43,7 +43,7 @@ class Dcf77MessageParser:
         self.cnt = 0
         self.prev = 0
 
-    def process(self, data):
+    def parse(self, data):
         i = 0
         buff = ''
         while i < len(data):
@@ -61,6 +61,7 @@ class Dcf77MessageParser:
                     self.cnt = 0
                 else:
                     buff += 'E'
+                    print(self.cnt, end="")
                     self.cnt = 0
             elif self.prev == 1 and data[i] == 1:
                 self.cnt += 1

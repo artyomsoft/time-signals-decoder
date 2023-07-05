@@ -16,10 +16,10 @@ from scipy.signal import lfilter
 
 from dcf_77 import dcf_77_decode, Dcf77MessageParser
 
-from utils import print_date
+from utils import print_datetime
 
 
-class SignalSource(ABC):
+class SourceSignal(ABC):
     def __init__(self, sample_rate, sample_count=None):
         self.sample_rate = sample_rate
         self.stream = self.stream(sample_count)
@@ -29,7 +29,7 @@ class SignalSource(ABC):
         pass
 
 
-class WavFile(SignalSource):
+class WavFileSignal(SourceSignal):
     def __init__(self, file_name, sample_count=None):
         self.block_size = 1000
         sample_rate, self.file_data = wavfile.read(file_name, mmap=True)
@@ -49,7 +49,7 @@ class WavFile(SignalSource):
                 break
 
 
-class AudioDevice(SignalSource):
+class AudioDeviceSignal(SourceSignal):
 
     def __init__(self, sample_count=None):
         self.processed_count = 0
@@ -119,13 +119,13 @@ class LowPassFilter:
 
 class SignalProcessor:
     @staticmethod
-    def draw_plots(signal_source, threshold_value):
+    def draw_plots(source_signal, threshold_value):
         source = np.array([])
         envelope = np.array([])
         pwm = np.array([])
-        envelope_detector = EnvelopeDetector(signal_source.sample_rate)
+        envelope_detector = EnvelopeDetector(source_signal.sample_rate)
 
-        for data in signal_source.stream:
+        for data in source_signal.stream:
             envelope_signal = envelope_detector.get_envelope(data)
             pwm_signal = threshold(envelope_signal, threshold_value)
             source = np.concatenate([source, data])
@@ -150,22 +150,22 @@ class SignalProcessor:
         plt.show()
 
     @staticmethod
-    def process_date_time(signal_source, threshold_value):
-        print_diff = isinstance(signal_source, AudioDevice)
+    def process_date_time(source_signal, threshold_value):
+        print_diff = isinstance(source_signal, AudioDeviceSignal)
         dcf_77_message = ''
-        envelope_detector = EnvelopeDetector(signal_source.sample_rate)
-        data_detector = Dcf77MessageParser(signal_source.sample_rate)
+        envelope_detector = EnvelopeDetector(source_signal.sample_rate)
+        message_parser = Dcf77MessageParser(source_signal.sample_rate)
 
-        for data in signal_source.stream:
+        for data in source_signal.stream:
             envelope_signal = envelope_detector.get_envelope(data)
             pwm_signal = threshold(envelope_signal, threshold_value)
-            symbols = data_detector.process(pwm_signal)
+            symbols = message_parser.parse(pwm_signal)
             print(symbols, end="", flush=True)
             for i in range(len(symbols)):
                 if symbols[i] == 'M':
                     try:
                         date = dcf_77_decode(dcf_77_message)
-                        print_date(date, print_diff=print_diff)
+                        print_datetime(date, print_diff=print_diff)
                     except Exception as e:
                         print('\nError parsing DCF77 message:' + str(e), flush=True)
                     dcf_77_message = ''
@@ -182,9 +182,9 @@ def validate_file(arg):
 
 def process(command, source, sample_count, threshold_value, file_name):
     if source == 'file':
-        src = WavFile(file_name, sample_count=sample_count)
+        src = WavFileSignal(file_name, sample_count=sample_count)
     elif source == 'audio-device':
-        src = AudioDevice(sample_count=sample_count)
+        src = AudioDeviceSignal(sample_count=sample_count)
         print("Device Info:")
         print(src.device_info)
     if command == 'plot':
