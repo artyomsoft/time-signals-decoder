@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from queue import Queue
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
 import sounddevice as sd
 import numpy as np
@@ -20,29 +20,32 @@ from utils import print_date
 
 
 class SignalSource(ABC):
-    def __init__(self, stream, sample_rate):
+    def __init__(self, sample_rate, sample_count=None):
         self.sample_rate = sample_rate
-        self.stream = stream
+        self.stream = self.stream(sample_count)
+
+    @abstractmethod
+    def stream(self, sample_count):
+        pass
 
 
 class WavFile(SignalSource):
     def __init__(self, file_name, sample_count=None):
+        self.block_size = 1000
         sample_rate, self.file_data = wavfile.read(file_name, mmap=True)
-        stream = self.wav_file_stream(sample_count)
-        super().__init__(stream, sample_rate)
+        super().__init__(sample_rate, sample_count)
 
-    def wav_file_stream(self, sample_count, block_size=1000):
+    def stream(self, sample_count):
 
         if not sample_count:
             sample_count = len(self.file_data)
-        file_data = self.file_data[0:sample_count-1]
+        file_data = self.file_data[0:sample_count]
         cnt = 0
         while True:
-            data = file_data[cnt:cnt + block_size]
-            cnt += block_size
+            data = file_data[cnt:cnt + self.block_size]
+            cnt += self.block_size
             yield data
             if len(data) == 0:
-                yield None
                 break
 
 
@@ -50,13 +53,11 @@ class AudioDevice(SignalSource):
 
     def __init__(self, sample_count=None):
         self.processed_count = 0
-        device_info = sd.query_devices(kind="input")
-        print(device_info)
-        sample_rate = device_info['default_samplerate']
-        stream = self.audio_device_stream(sample_count)
-        super().__init__(stream, sample_rate)
+        self.device_info = sd.query_devices(kind="input")
+        sample_rate = self.device_info['default_samplerate']
+        super().__init__(sample_rate, sample_count)
 
-    def audio_device_stream(self, sample_count):
+    def stream(self, sample_count):
         event = threading.Event()
         queue = Queue()
         self.processed_count = 0
@@ -67,8 +68,14 @@ class AudioDevice(SignalSource):
                 return
             data = indata[:, 0]
             self.processed_count += samples
-            queue.put(data)
             if not (sample_count is None) and self.processed_count > sample_count:
+                rest = self.processed_count - sample_count
+                data = data[0: -rest]
+                stop = True
+            else:
+                stop = False
+            queue.put(data)
+            if stop:
                 event.set()
 
         input_stream = sd.InputStream(callback=audio_callback)
@@ -77,7 +84,6 @@ class AudioDevice(SignalSource):
                 yield queue.get()
                 if event.is_set():
                     break
-        yield None
 
 
 class EnvelopeDetector:
@@ -119,10 +125,7 @@ class SignalProcessor:
         pwm = np.array([])
         envelope_detector = EnvelopeDetector(signal_source.sample_rate)
 
-        while True:
-            data = next(signal_source.stream)
-            if data is None:
-                break
+        for data in signal_source.stream:
             envelope_signal = envelope_detector.get_envelope(data)
             pwm_signal = threshold(envelope_signal, threshold_value)
             source = np.concatenate([source, data])
@@ -130,9 +133,20 @@ class SignalProcessor:
             pwm = np.concatenate([pwm, pwm_signal])
 
         fig, (ax1, ax2) = plt.subplots(2, 1)
-        ax1.plot(source)
-        ax1.plot(envelope)
-        ax2.plot(pwm)
+        fig.canvas.manager.set_window_title('Signals')
+        fig.tight_layout(pad=3)
+        ax1.plot(source, label='Source Signal')
+        ax1.set_title('Source signal and Envelope')
+        ax1.set_xlabel('Samples count')
+        ax1.set_ylabel('Amplitude')
+        ax1.yaxis.set_label_position("right")
+        ax1.plot(envelope, label='Envelope')
+        ax1.legend()
+        ax2.plot(pwm, color='red')
+        ax2.set_title('PWM Signal')
+        ax2.set_xlabel('Samples count')
+        ax2.set_ylabel('Amplitude')
+        ax2.yaxis.set_label_position("right")
         plt.show()
 
     @staticmethod
@@ -142,10 +156,7 @@ class SignalProcessor:
         envelope_detector = EnvelopeDetector(signal_source.sample_rate)
         data_detector = Dcf77MessageParser(signal_source.sample_rate)
 
-        while True:
-            data = next(signal_source.stream)
-            if data is None:
-                break
+        for data in signal_source.stream:
             envelope_signal = envelope_detector.get_envelope(data)
             pwm_signal = threshold(envelope_signal, threshold_value)
             symbols = data_detector.process(pwm_signal)
@@ -174,6 +185,8 @@ def process(command, source, sample_count, threshold_value, file_name):
         src = WavFile(file_name, sample_count=sample_count)
     elif source == 'audio-device':
         src = AudioDevice(sample_count=sample_count)
+        print("Device Info:")
+        print(src.device_info)
     if command == 'plot':
         SignalProcessor.draw_plots(src, threshold_value=threshold_value)
     elif command == 'decode-dcf77':
@@ -203,6 +216,7 @@ def get_command():
 
     args = parser.parse_args()
     config = vars(args)
+    print("Command line arguments:")
     print(config)
     if config['source'] == 'file':
         validate_file(config['file-name'])
